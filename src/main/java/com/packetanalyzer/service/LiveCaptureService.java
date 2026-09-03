@@ -2,6 +2,7 @@ package com.packetanalyzer.service;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -23,6 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class LiveCaptureService {
 
     private final PacketAnalysisService analysisService;
+
+    @Value("${packetlab.capture.enabled:true}")
+    private boolean captureEnabled;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Process captureProcess;
     private volatile Map<String, Object> latestResult = new LinkedHashMap<>();
@@ -41,6 +45,12 @@ public class LiveCaptureService {
 
     @PostConstruct
     public void start() {
+        if (!captureEnabled) {
+            status = "DISABLED";
+            message = "Automatic live capture is disabled in this deployment. Manual PCAP analysis is available.";
+            return;
+        }
+
         if (!running.compareAndSet(false, true)) return;
 
         Thread worker = new Thread(this::captureLoop, "packetlab-live-capture");

@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: packet-analyzer
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: PACKETLAB_CAPTURE_ENABLED
+        value: "false"
