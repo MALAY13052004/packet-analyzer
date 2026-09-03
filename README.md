@@ -1,223 +1,363 @@
-# PacketLab — Network Packet Analyzer & Live DPI Monitor
+# PacketLab — Network Intelligence & Packet Analyzer
 
-PacketLab is a Java 21 + Spring Boot network intelligence platform built around a Deep Packet Inspection (DPI) engine. It supports **two analysis modes**:
+PacketLab is a Java/Spring Boot network packet analysis platform that captures network traffic, performs packet-level inspection, detects applications, reconstructs network conversations, and surfaces security signals through a modern web dashboard.
 
-1. **Automatic Live Capture (default):** PacketLab detects the host OS and network interface, captures short complete PCAP windows, analyzes them automatically, and updates the web dashboard.
-2. **Manual PCAP Analysis:** Drop any saved `.pcap` into the dashboard when you want to inspect an existing capture.
+It supports **automatic live packet capture** for local environments and **`.pcap` upload analysis** as a fallback for hosted/cloud environments where raw packet capture is restricted.
 
-The project keeps the DPI pipeline from the original engine: PCAP reader → packet parser → SNI extraction → application classification → rule/alert inspection → statistics → flows.
+---
 
-## What the project does
+## Dashboard
 
-- Automatic live network capture in small complete PCAP windows
+### Overview
+
+PacketLab provides a live network intelligence workspace with automatic capture, packet statistics, traffic volume, tracked flows, and security alerts.
+
+![PacketLab Dashboard Overview](docs/screenshots/dashboard-overview.jpeg)
+
+### Protocol Intelligence & Application Detection
+
+The protocol view breaks captured traffic into TCP, UDP, other packets, and dropped packets. The DPI layer also attempts to identify applications such as HTTPS and reports unknown or other traffic.
+
+![PacketLab Protocol Intelligence](docs/screenshots/protocol-intelligence.jpeg)
+
+### Security Alerts & Network Flows
+
+PacketLab reconstructs endpoint conversations from captured packets and presents rule-based security signals alongside source and destination information.
+
+![PacketLab Network Flows](docs/screenshots/network-flows.jpeg)
+
+---
+
+## Features
+
+- **Automatic live packet capture**
+- **Java-based deep packet inspection (DPI)**
+- TCP / UDP / other packet classification
+- Application/protocol detection
+- Network flow and conversation tracking
+- Security alert generation
+- Packet count and traffic-volume statistics
 - Manual `.pcap` upload and analysis
-- Ethernet / IPv4 / TCP / UDP packet parsing
-- TLS SNI/domain extraction where available
-- Application classification
-- Network flow tracking
-- Rule-based security alerts
-- TCP / UDP / other / dropped packet statistics
-- 3D/glassmorphism dashboard with live polling
-- Cross-platform Java application structure for Windows, macOS and Linux
-- Automated Maven test/build workflow through GitHub Actions
+- REST API for analysis and live-status data
+- Modern responsive dashboard UI
+- Cross-platform design for macOS, Linux, and Windows
+- Cloud deployment support with PCAP-upload fallback
 
-## Architecture
+---
+
+## How PacketLab Works
 
 ```text
-                 ┌──────────────────────┐
-                 │      PacketLab       │
-                 │   Spring Boot API   │
-                 └──────────┬───────────┘
-                            │
-              ┌─────────────┴─────────────┐
-              │                           │
-      Automatic Live Capture        Manual PCAP Upload
-              │                           │
-      tcpdump / dumpcap              Multipart upload
-              │                           │
-        temporary PCAP                  PCAP
-              │                           │
-              └─────────────┬─────────────┘
-                            ↓
-                    PacketAnalysisService
-                            ↓
-                    Java DPI Engine
-                            ↓
-          ┌─────────────────┼─────────────────┐
-          ↓                 ↓                 ↓
-      Statistics          Flows             Alerts
-          └─────────────────┼─────────────────┘
-                            ↓
-                     REST API / Dashboard
+Network Traffic
+      │
+      ▼
+Packet Capture
+(tcpdump / dumpcap)
+      │
+      ▼
+Temporary PCAP Window
+      │
+      ▼
+Java DPI Engine
+      │
+      ├── Packet Classification
+      ├── Application Detection
+      ├── Flow Reconstruction
+      └── Security Rules
+      │
+      ▼
+REST API
+      │
+      ▼
+PacketLab Web Dashboard
 ```
+
+For local environments, PacketLab captures traffic automatically and continuously analyzes small packet windows.
+
+For hosted environments where raw packet capture is unavailable, users can upload a saved `.pcap` file and run the same Java analysis pipeline.
+
+---
+
+## Technology Stack
+
+### Backend
+
+- Java 21
+- Spring Boot
+- Maven
+- REST APIs
+- Java packet-analysis / DPI engine
+
+### Packet Capture
+
+- `tcpdump` / libpcap on Linux and macOS
+- `dumpcap` on Windows
+- Automatic network-interface detection
+
+### Frontend
+
+- HTML5
+- CSS3
+- JavaScript
+- Responsive dashboard UI
+
+### Deployment
+
+- Docker
+- Render-compatible configuration
+- GitHub Actions / Maven testing workflow
+
+---
 
 ## Requirements
 
-### All platforms
+### Local Development
+
+Install:
 
 - Java 21+
 - Maven 3.9+
-- A modern browser
+- Packet capture utility:
+  - macOS/Linux: `tcpdump`
+  - Windows: `dumpcap`
 
-### Automatic live capture
+Root/administrator privileges may be required for live packet capture depending on the operating system and network interface.
 
-- **macOS / Linux:** `tcpdump` with libpcap and sufficient packet-capture permissions.
-- **Windows:** Npcap plus `dumpcap` (normally installed with Wireshark).
+---
 
-If live capture is unavailable, the application reports the reason through `/api/live`. **Manual PCAP analysis remains available.**
-
-> A cross-platform Java application does not remove the operating-system requirement for raw packet capture. Capture permissions/drivers are controlled by the OS.
-
-## Run PacketLab
+## Running PacketLab
 
 ### macOS
 
-Double-click:
+From the project directory:
 
-```text
+```bash
+cd ~/Downloads/packet-analyzer
 scripts/run-macos.command
 ```
 
-The script checks Java and Maven, then starts Spring Boot. Live capture starts automatically when capture permissions are available.
+Then open:
 
-### Linux
+```text
+http://localhost:8080
+```
+
+PacketLab automatically detects the default network interface and starts live capture when permissions allow it.
+
+### Windows / Linux
+
+Start the Spring Boot application with Maven:
 
 ```bash
-chmod +x scripts/run-linux.sh
-./scripts/run-linux.sh
+mvn spring-boot:run
 ```
 
-### Windows
-
-Double-click:
+Then open:
 
 ```text
-scripts/run-windows.bat
+http://localhost:8080
 ```
 
-or run the PowerShell launcher:
+The capture backend automatically selects the appropriate supported capture mechanism.
 
-```powershell
-./scripts/run-windows.ps1
-```
+---
 
-Open `http://localhost:8080` in your browser.
+## Automatic Live Capture
 
-## Automatic live mode
+Automatic live capture is the default mode.
 
-Live mode is enabled by default. The service:
+PacketLab:
 
 1. Detects the operating system.
-2. Detects the default network interface unless one is configured.
-3. Starts `tcpdump` on macOS/Linux or `dumpcap` on Windows.
-4. Captures a small complete PCAP window (40 packets by default).
-5. Moves the completed capture to the runtime PCAP area.
-6. Sends it to the Java DPI engine.
-7. Publishes the latest result through `/api/live`.
-8. Repeats continuously.
+2. Detects the default network interface.
+3. Starts the appropriate capture tool.
+4. Collects a small packet window.
+5. Writes the capture to a temporary PCAP file.
+6. Sends the PCAP through the Java DPI pipeline.
+7. Updates packet, protocol, application, flow, and security information.
+8. Repeats the process continuously.
 
-The generated PCAP files are runtime artifacts and are ignored by Git.
+The default configuration analyzes **40 packets per capture window**.
 
-## Manual PCAP mode
+---
 
-The dashboard still provides an optional PCAP drop area. It sends the selected file to:
+## Manual PCAP Analysis
+
+PacketLab also supports saved PCAP files.
+
+Use the dashboard upload area to select a `.pcap` file. The backend sends the file through the same Java analysis pipeline used for captured traffic.
+
+This is useful for:
+
+- Testing
+- Replaying captures
+- Debugging
+- Offline analysis
+- Hosted deployments
+- Environments where live capture is restricted
+
+---
+
+## Cloud / Hosted Deployment
+
+Raw packet capture is fundamentally different in a hosted web service.
+
+A cloud container generally cannot inspect the visitor's laptop, Wi-Fi traffic, or arbitrary network traffic outside its own network namespace. In addition, cloud platforms may restrict the privileges required to create raw packet sockets.
+
+Therefore PacketLab uses a practical architecture:
 
 ```text
-POST /api/analyze-pcap
+LOCAL ENVIRONMENT
+Automatic Live Capture
+        │
+        ▼
+Java DPI Analysis
+        │
+        ▼
+Dashboard
+
+
+CLOUD / HOSTED ENVIRONMENT
+        │
+        ▼
+PCAP Upload
+        │
+        ▼
+Java DPI Analysis
+        │
+        ▼
+Dashboard
 ```
 
-This is useful for previously recorded traffic, demonstrations, test datasets, and captures from other tools.
+This keeps the live-capture experience available locally while preserving the full analysis workflow for a public hosted demo.
+
+---
 
 ## Configuration
 
-`src/main/resources/application.properties`:
+The main capture configuration is stored in:
+
+```text
+src/main/resources/application.properties
+```
+
+Example:
 
 ```properties
+server.port=${PORT:8080}
+server.address=0.0.0.0
+
 packetlab.capture.enabled=true
 packetlab.capture.packets-per-window=40
 packetlab.capture.interface=auto
 packetlab.capture.tool=auto
+packetlab.capture.environment=auto
 ```
 
-Examples:
+---
 
-```properties
-packetlab.capture.interface=en0
-```
+## REST API
 
-or on Windows, a `dumpcap` interface number:
-
-```properties
-packetlab.capture.interface=1
-```
-
-You can also set a custom capture executable with:
-
-```properties
-packetlab.capture.tool=/path/to/tcpdump
-```
-
-## API
+Important endpoints include:
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/health` | Backend health check |
-| `GET /api/live` | Live capture status + latest analysis |
-| `GET /api/analyze` | DPI engine readiness |
-| `POST /api/analyze-pcap` | Analyze a manually uploaded PCAP |
+| `GET /api/health` | Application health check |
+| `GET /api/live` | Live capture status and latest analysis |
+| `POST /api/analyze-pcap` | Analyze an uploaded PCAP file |
 
-## Project structure
+The frontend polls the live-status endpoint to keep the dashboard updated.
+
+---
+
+## Project Structure
 
 ```text
-PacketLab/
-├── README.md
-├── START_HERE.md
-├── pom.xml
-├── .gitignore
-├── .github/workflows/build.yml
-├── scripts/
-│   ├── run-macos.command
-│   ├── run-linux.sh
-│   ├── run-windows.bat
-│   └── run-windows.ps1
+packet-analyzer/
 ├── src/
-│   ├── main/java/com/packetanalyzer/
-│   │   ├── engine/
-│   │   ├── model/
-│   │   ├── parser/
-│   │   ├── pcap/
-│   │   ├── service/
-│   │   └── PacketController.java
-│   ├── main/resources/
-│   │   ├── application.properties
-│   │   └── static/
-│   └── test/java/
-└── frontend/                 # optional Vite source
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── ...
+│   │   └── resources/
+│   │       ├── application.properties
+│   │       └── static/
+│   │           ├── index.html
+│   │           ├── style.css
+│   │           └── app.js
+│   └── test/
+├── docs/
+│   └── screenshots/
+│       ├── dashboard-overview.jpeg
+│       ├── protocol-intelligence.jpeg
+│       └── network-flows.jpeg
+├── scripts/
+├── Dockerfile
+├── render.yaml
+├── pom.xml
+└── README.md
 ```
 
-## Relation to the original DPI engine
+---
 
-The original project describes a Java DPI implementation with packet parsing, SNI extraction, application identification, blocking/rules, flow tracking, statistics and automated tests. PacketLab keeps that core pipeline while adding the Spring Boot API, live capture service and dashboard. The original quick-start documentation uses Java 11+, Maven and libpcap; this version standardizes the application build on Java 21 and makes live capture OS-aware. fileciteturn1file0L13-L21 fileciteturn1file0L142-L176
+## Testing
 
-## Test
+Run the complete Maven test suite:
 
 ```bash
-mvn test
+mvn clean test
 ```
 
-The repository also includes a GitHub Actions workflow that builds and tests the project with Java 21.
+The project includes automated tests covering the core analysis and application behavior.
 
-## Privacy
+---
 
-Network captures may contain sensitive traffic metadata. Do not commit `.pcap`, `.pcapng`, or the `pcaps/` runtime directory to GitHub.
+## Privacy & Capture Safety
 
-## Resume description
+Packet capture can contain sensitive information.
 
-**PacketLab — Network Packet Analyzer & Live DPI Monitor**  
-*Java 21, Spring Boot, PCAP, REST API, HTML/CSS/JavaScript*
+Use PacketLab only on networks and systems where you have permission to inspect traffic.
 
-- Developed a Spring Boot network packet analyzer with automatic live packet capture and offline PCAP analysis.
-- Implemented packet parsing, application classification, network flow tracking, traffic statistics and security alerts.
-- Built a real-time 3D dashboard that consumes live DPI results through REST APIs.
-- Designed OS-aware capture support for macOS/Linux (`tcpdump`) and Windows (`dumpcap`/Npcap).
-- Added automated unit/build verification with Maven and GitHub Actions.
+Captured PCAP files may contain:
+
+- IP addresses
+- Ports
+- Protocol metadata
+- Application information
+- Network conversation details
+- Other packet-level information
+
+Avoid uploading confidential captures to public or third-party environments.
+
+---
+
+## Why PacketLab?
+
+PacketLab combines a backend packet-analysis engine with a visual network-intelligence dashboard.
+
+Instead of displaying raw packet data alone, it turns traffic into higher-level information:
+
+**Packets → Protocols → Applications → Flows → Security Signals**
+
+This makes the project useful as a practical demonstration of:
+
+- Java backend development
+- Spring Boot REST APIs
+- Network programming
+- Packet analysis
+- Deep packet inspection
+- Security monitoring concepts
+- Frontend engineering
+- Docker deployment
+- Cross-platform system integration
+
+---
+
+## Resume Description
+
+> **PacketLab — Network Intelligence & Packet Analyzer:** Built a Java 21/Spring Boot network analysis platform with automatic live packet capture, deep packet inspection, protocol and application detection, network-flow reconstruction, rule-based security alerts, PCAP upload analysis, and a responsive real-time web dashboard.
+
+---
+
+## Project Goal
+
+PacketLab is designed to demonstrate how low-level network packets can be transformed into useful, human-readable network intelligence through a combination of packet capture, Java-based analysis, REST APIs, and a modern visualization layer.
