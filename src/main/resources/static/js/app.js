@@ -21,6 +21,28 @@ function message(text, error = false) {
   $('message').className = `message${error ? ' error' : ''}`;
   $('message').querySelector('span').textContent = text;
 }
+
+function showCaptureFallback(payload) {
+  const notice = $('captureNotice');
+  if (!notice) return;
+  const unavailable = payload?.status === 'CLOUD_UNAVAILABLE' || payload?.status === 'UNAVAILABLE' || payload?.status === 'DISABLED' || payload?.status === 'ERROR';
+  notice.hidden = !unavailable;
+  if (!unavailable) return;
+
+  const cloud = payload?.status === 'CLOUD_UNAVAILABLE' || payload?.environment === 'cloud';
+  $('captureNoticeTitle').textContent = cloud ? 'LIVE CAPTURE UNAVAILABLE IN CLOUD' : 'LIVE CAPTURE UNAVAILABLE';
+  $('captureNoticeText').textContent = payload?.fallbackMessage || payload?.message || 'Use a .pcap upload below for analysis.';
+  $('dropTitle').textContent = cloud ? 'UPLOAD A PCAP TO CONTINUE' : 'DROP PCAP HERE';
+  $('dropSub').textContent = 'Live capture is unavailable here — upload a saved .pcap and run the Java DPI analysis instead.';
+  $('heroDescription').textContent = cloud
+    ? 'This hosted environment cannot access raw network packets. Use the PCAP upload below to run the same Java DPI analysis on a saved capture.'
+    : 'Live capture is unavailable in this runtime. Use the PCAP upload below to run the same Java DPI analysis on a saved capture.';
+  $('heroDescriptionMain').textContent = cloud
+    ? 'PacketLab is running normally, but cloud container security prevents raw packet capture. Upload a .pcap file to analyze packets, applications, flows and security signals.'
+    : 'Live capture is unavailable in this runtime. Upload a .pcap file to analyze packets, applications, flows and security signals.';
+  $('dropZone').classList.add('fallback-mode');
+  $('message').classList.add('fallback-message');
+}
 function choose(file) {
   if (!file) return;
   if (!file.name.toLowerCase().endsWith('.pcap')) {
@@ -32,7 +54,7 @@ function choose(file) {
   $('fileSize').textContent = `${fmtBytes(file.size)} · Ready to analyze`;
   $('clearBtn').hidden = false;
   $('analyzeBtn').disabled = false;
-  message(`${file.name} is ready for manual analysis.`);
+  message(`${file.name} is ready — click ANALYZE CAPTURE to run the Java DPI engine.`);
 }
 
 $('dropZone').addEventListener('click', () => $('fileInput').click());
@@ -40,6 +62,7 @@ $('fileInput').addEventListener('change', e => choose(e.target.files[0]));
 $('dropZone').addEventListener('dragover', e => { e.preventDefault(); $('dropZone').classList.add('dragging'); });
 $('dropZone').addEventListener('dragleave', () => $('dropZone').classList.remove('dragging'));
 $('dropZone').addEventListener('drop', e => { e.preventDefault(); $('dropZone').classList.remove('dragging'); choose(e.dataTransfer.files[0]); });
+$('uploadFallbackBtn')?.addEventListener('click', e => { e.stopPropagation(); $('fileInput').click(); });
 $('clearBtn').addEventListener('click', () => {
   selectedFile = null;
   $('fileInput').value = '';
@@ -47,7 +70,7 @@ $('clearBtn').addEventListener('click', () => {
   $('analyzeBtn').disabled = true;
   $('fileName').textContent = 'No capture selected';
   $('fileSize').textContent = 'Choose a .pcap file above';
-  message('Automatic live capture continues in the background.');
+  message('PCAP selection cleared. Upload another .pcap whenever you are ready.');
 });
 $('analyzeBtn').addEventListener('click', analyze);
 
@@ -114,14 +137,46 @@ function renderFlows(flows) {
 function renderLiveResponse(payload) {
   const live = payload?.data;
   const state = payload?.status || 'OFFLINE';
-  const label = state === 'LIVE' ? `LIVE · ${payload.interface || 'CAPTURE'}` : state;
+  const unavailable = state === 'CLOUD_UNAVAILABLE' || state === 'UNAVAILABLE' || state === 'DISABLED';
+
+  showCaptureFallback(payload);
+  if (state === 'LIVE') {
+    $('heroDescription').textContent = 'Automatically capture live network traffic and turn it into traffic intelligence, application insights, network flows and security signals.';
+    $('heroDescriptionMain').textContent = 'PacketLab captures traffic automatically, then the Java DPI engine decodes packets, classifies applications, tracks conversations and surfaces low-level anomalies in near real time.';
+    $('dropTitle').textContent = 'DROP PCAP HERE · OPTIONAL';
+    $('dropSub').textContent = 'Live capture is automatic — upload only when you want to inspect a saved PCAP';
+    $('dropZone').classList.remove('fallback-mode');
+    $('message').classList.remove('fallback-message');
+  }
+
+  let label = 'OFFLINE';
+  if (state === 'LIVE') label = `LIVE · ${payload.interface || 'CAPTURE'}`;
+  else if (unavailable) label = 'PCAP FALLBACK';
+  else if (state === 'ERROR') label = 'CAPTURE ERROR';
   setStatus(state === 'LIVE' ? '' : state === 'ERROR' ? 'error' : 'busy', label);
+
   const hero = document.querySelector('.hero-tag');
-  if (hero) hero.innerHTML = `<i></i> LIVE CAPTURE · ${esc(payload.interface || 'AUTO')}`;
+  if (hero) {
+    if (state === 'LIVE') {
+      hero.innerHTML = `<i></i> LIVE CAPTURE · ${esc(payload.interface || 'AUTO')}`;
+    } else if (unavailable) {
+      hero.innerHTML = `<i></i> PCAP FALLBACK · LIVE CAPTURE UNAVAILABLE`;
+    } else {
+      hero.innerHTML = `<i></i> NETWORK WORKSPACE · ${esc(label)}`;
+    }
+  }
+
   if (live && Number(live.totalPackets) >= 0) render(live);
-  if (state === 'ERROR') message(payload.message || 'Automatic live capture needs attention.', true);
-  else if (live && Number(live.totalPackets) > 0) message(`Automatic capture active — ${fmtNum(live.totalPackets)} packets in the latest window.`);
-  else message(payload.message || 'Waiting for live packets…');
+
+  if (unavailable) {
+    message(payload.message || 'Live capture is unavailable here. Use the PCAP upload above.', false);
+  } else if (state === 'ERROR') {
+    message(payload.message || 'Automatic live capture needs attention. Manual PCAP analysis is available.', true);
+  } else if (live && Number(live.totalPackets) > 0) {
+    message(`Automatic capture active — ${fmtNum(live.totalPackets)} packets in the latest window.`);
+  } else {
+    message(payload.message || 'Waiting for live packets…');
+  }
 }
 
 async function pollLive() {

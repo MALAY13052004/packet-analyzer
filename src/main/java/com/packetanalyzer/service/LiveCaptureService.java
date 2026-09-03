@@ -41,6 +41,9 @@ public class LiveCaptureService {
     @Value("${packetlab.capture.tool:auto}")
     private String configuredTool;
 
+    @Value("${packetlab.capture.environment:auto}")
+    private String captureEnvironment;
+
     private volatile Process captureProcess;
     private volatile Map<String, Object> latestResult = new LinkedHashMap<>();
     private volatile String status = "STARTING";
@@ -103,6 +106,10 @@ public class LiveCaptureService {
                 if (!running.get()) break;
 
                 if (exitCode != 0) {
+                    if (isPermissionDenied(output)) {
+                        markCaptureUnavailable();
+                        break;
+                    }
                     fail(captureError(output));
                     Thread.sleep(3000);
                     continue;
@@ -126,7 +133,7 @@ public class LiveCaptureService {
         } finally {
             destroyCaptureProcess();
             running.set(false);
-            if (!"ERROR".equals(status) && !"DISABLED".equals(status)) status = "STOPPED";
+            if (!"ERROR".equals(status) && !"DISABLED".equals(status) && !"CLOUD_UNAVAILABLE".equals(status) && !"UNAVAILABLE".equals(status)) status = "STOPPED";
         }
     }
 
@@ -287,11 +294,32 @@ public class LiveCaptureService {
         return output.toString();
     }
 
+    private boolean isPermissionDenied(String output) {
+        String cleaned = clean(output).toLowerCase(Locale.ROOT);
+        return cleaned.contains("permission denied")
+                || cleaned.contains("operation not permitted")
+                || cleaned.contains("cap_net_raw")
+                || cleaned.contains("you don't have permission to perform this capture");
+    }
+
+    private boolean isCloudEnvironment() {
+        return "cloud".equalsIgnoreCase(captureEnvironment)
+                || "true".equalsIgnoreCase(System.getenv("RENDER"));
+    }
+
+    private void markCaptureUnavailable() {
+        status = isCloudEnvironment() ? "CLOUD_UNAVAILABLE" : "UNAVAILABLE";
+        if ("CLOUD_UNAVAILABLE".equals(status)) {
+            message = "Live packet capture is unavailable in this cloud container because raw packet capture privileges (CAP_NET_RAW) are not granted. Use the PCAP upload below for analysis.";
+        } else {
+            message = "Live packet capture is unavailable in this runtime because packet-capture privileges are not available. Use the PCAP upload below for analysis.";
+        }
+    }
+
     private String captureError(String output) {
         String cleaned = clean(output);
         if (cleaned.isBlank()) return captureTool + " could not start capturing on " + interfaceName + ".";
-        if (cleaned.toLowerCase(Locale.ROOT).contains("permission denied")
-                || cleaned.toLowerCase(Locale.ROOT).contains("operation not permitted")) {
+        if (isPermissionDenied(cleaned)) {
             return "Packet capture permission was denied for " + interfaceName + ". The host/container must grant packet-capture privileges.";
         }
         if (cleaned.toLowerCase(Locale.ROOT).contains("password is required")) {
@@ -331,6 +359,10 @@ public class LiveCaptureService {
         response.put("tool", captureTool);
         response.put("lastCaptureAt", lastCaptureAt == null ? null : lastCaptureAt.toString());
         response.put("capturing", running.get());
+        response.put("environment", isCloudEnvironment() ? "cloud" : captureEnvironment);
+        response.put("captureAvailable", "LIVE".equals(status));
+        response.put("fallback", "PCAP_UPLOAD");
+        response.put("fallbackMessage", "Upload a .pcap file below to run the same Java DPI analysis without live capture.");
         response.put("data", latestResult);
         return response;
     }

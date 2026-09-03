@@ -7,3 +7,5 @@ services:
     envVars:
       - key: PACKETLAB_CAPTURE_ENABLED
         value: "true"
+      - key: PACKETLAB_CAPTURE_ENVIRONMENT
+        value: "cloud"
