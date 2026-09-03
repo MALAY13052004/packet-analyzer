@@ -1,0 +1,30 @@
+# Maven / Java
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+
+# Runtime captures and logs
+pcaps/
+*.pcap
+*.pcapng
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local environment
+.env
