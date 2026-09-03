@@ -6,4 +6,4 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: PACKETLAB_CAPTURE_ENABLED
-        value: "false"
+        value: "true"
